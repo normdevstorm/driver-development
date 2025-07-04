@@ -296,8 +296,8 @@ static int __init crypto_driver_init(void)
         return ret;
     }
     
-    // Create device class
-    crypto_class = class_create(THIS_MODULE, CLASS_NAME);
+    // Create device class - updated for newer kernel API
+    crypto_class = class_create(CLASS_NAME);
     if (IS_ERR(crypto_class)) {
         cdev_del(&crypto_cdev);
         unregister_chrdev_region(dev_num, 1);
@@ -332,8 +332,6 @@ static int __init crypto_driver_init(void)
     if (IS_ERR(sha1_tfm)) {
         printk(KERN_ALERT "crypto_driver: Failed to allocate SHA1 transform (error: %ld)\n", PTR_ERR(sha1_tfm));
         crypto_free_skcipher(des_tfm);
-        crypto_free_skcipher(des_tfm);
-#endif
         device_destroy(crypto_class, dev_num);
         class_destroy(crypto_class);
         cdev_del(&crypto_cdev);
@@ -375,5 +373,7 @@ module_exit(crypto_driver_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Student");
+MODULE_DESCRIPTION("DES Encryption and SHA1 Hashing Driver for CentOS 9 64-bit");
+MODULE_VERSION("2.0");
 MODULE_DESCRIPTION("DES Encryption and SHA1 Hashing Driver for CentOS 9 64-bit");
 MODULE_VERSION("2.0");
