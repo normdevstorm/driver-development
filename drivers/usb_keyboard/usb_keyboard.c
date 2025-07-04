@@ -6,8 +6,8 @@
 #include <linux/hid.h>
 #include <linux/slab.h>
 
-#define DRIVER_NAME "usb_keyboard_driver"
-#define DRIVER_VERSION "1.0"
+#define DRIVER_NAME "usb_keyboard_centos9"
+#define DRIVER_VERSION "2.0"
 
 /* USB keyboard data structure */
 struct usb_keyboard {
@@ -300,6 +300,6 @@ module_init(usb_kbd_init);
 module_exit(usb_kbd_exit);
 
 MODULE_AUTHOR("Student");
-MODULE_DESCRIPTION("USB Keyboard Driver for CentOS 32-bit");
+MODULE_DESCRIPTION("USB Keyboard Driver for CentOS 9 64-bit");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(DRIVER_VERSION);

@@ -8,12 +8,13 @@
 #include <linux/slab.h>
 #include <linux/crypto.h>
 #include <crypto/hash.h>
+#include <crypto/skcipher.h>
 #include <linux/scatterlist.h>
 #include <linux/random.h>
 #include <linux/version.h>
 
-// Use simple cipher API for older kernels
-#define USE_SIMPLE_CIPHER
+// Modern kernel crypto API - no need for simple cipher
+#undef USE_SIMPLE_CIPHER
 
 #define DEVICE_NAME "crypto_dev"
 #define CLASS_NAME "crypto_class"
@@ -46,12 +47,8 @@ static struct device *crypto_device = NULL;
 static struct cdev crypto_cdev;
 static dev_t dev_num;
 
-// Crypto contexts
-#ifdef USE_SIMPLE_CIPHER
-static struct crypto_cipher *des_tfm = NULL;
-#else
+// Crypto contexts - use modern skcipher API
 static struct crypto_skcipher *des_tfm = NULL;
-#endif
 static struct crypto_shash *sha1_tfm = NULL;
 static char des_key[DES_KEY_SIZE] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
 
@@ -97,20 +94,6 @@ static ssize_t crypto_write(struct file *filep, const char __user *buffer, size_
 
 static int des_encrypt_decrypt(const char *input, char *output, size_t length, bool encrypt)
 {
-#ifdef USE_SIMPLE_CIPHER
-    int i;
-    
-    // Simple cipher API - process block by block
-    for (i = 0; i < length; i += DES_BLOCK_SIZE) {
-        if (encrypt) {
-            crypto_cipher_encrypt_one(des_tfm, output + i, input + i);
-        } else {
-            crypto_cipher_decrypt_one(des_tfm, output + i, input + i);
-        }
-    }
-    
-    return 0;
-#else
     struct skcipher_request *req;
     struct scatterlist sg_in, sg_out;
     char *aligned_input, *aligned_output;
@@ -155,7 +138,6 @@ static int des_encrypt_decrypt(const char *input, char *output, size_t length, b
     kfree(aligned_output);
     
     return ret;
-#endif
 }
 
 static int sha1_hash(const char *input, size_t input_length, char *output)
@@ -280,11 +262,7 @@ static long crypto_ioctl(struct file *filep, unsigned int cmd, unsigned long arg
         if (copy_from_user(des_key, (char __user *)arg, DES_KEY_SIZE))
             return -EFAULT;
         
-#ifdef USE_SIMPLE_CIPHER
-        ret = crypto_cipher_setkey(des_tfm, des_key, DES_KEY_SIZE);
-#else
         ret = crypto_skcipher_setkey(des_tfm, des_key, DES_KEY_SIZE);
-#endif
         break;
         
     default:
@@ -337,11 +315,7 @@ static int __init crypto_driver_init(void)
     
     // Initialize crypto transforms
     printk(KERN_INFO "crypto_driver: Allocating DES transform...\n");
-#ifdef USE_SIMPLE_CIPHER
-    des_tfm = crypto_alloc_cipher("des", 0, 0);
-#else
-    des_tfm = crypto_alloc_skcipher("des", 0, CRYPTO_ALG_ASYNC);
-#endif
+    des_tfm = crypto_alloc_skcipher("ecb(des)", 0, 0);
     if (IS_ERR(des_tfm)) {
         printk(KERN_ALERT "crypto_driver: Failed to allocate DES transform (error: %ld)\n", PTR_ERR(des_tfm));
         printk(KERN_ALERT "crypto_driver: Make sure des_generic module is loaded\n");
@@ -357,9 +331,7 @@ static int __init crypto_driver_init(void)
     sha1_tfm = crypto_alloc_shash("sha1", 0, 0);
     if (IS_ERR(sha1_tfm)) {
         printk(KERN_ALERT "crypto_driver: Failed to allocate SHA1 transform (error: %ld)\n", PTR_ERR(sha1_tfm));
-#ifdef USE_SIMPLE_CIPHER
-        crypto_free_cipher(des_tfm);
-#else
+        crypto_free_skcipher(des_tfm);
         crypto_free_skcipher(des_tfm);
 #endif
         device_destroy(crypto_class, dev_num);
@@ -371,19 +343,11 @@ static int __init crypto_driver_init(void)
     printk(KERN_INFO "crypto_driver: SHA1 transform allocated successfully\n");
     
     // Set default DES key
-#ifdef USE_SIMPLE_CIPHER
-    ret = crypto_cipher_setkey(des_tfm, des_key, DES_KEY_SIZE);
-#else
     ret = crypto_skcipher_setkey(des_tfm, des_key, DES_KEY_SIZE);
-#endif
     if (ret) {
         printk(KERN_ALERT "crypto_driver: Failed to set DES key\n");
         crypto_free_shash(sha1_tfm);
-#ifdef USE_SIMPLE_CIPHER
-        crypto_free_cipher(des_tfm);
-#else
         crypto_free_skcipher(des_tfm);
-#endif
         device_destroy(crypto_class, dev_num);
         class_destroy(crypto_class);
         cdev_del(&crypto_cdev);
@@ -398,11 +362,7 @@ static int __init crypto_driver_init(void)
 static void __exit crypto_driver_exit(void)
 {
     crypto_free_shash(sha1_tfm);
-#ifdef USE_SIMPLE_CIPHER
-    crypto_free_cipher(des_tfm);
-#else
     crypto_free_skcipher(des_tfm);
-#endif
     device_destroy(crypto_class, dev_num);
     class_destroy(crypto_class);
     cdev_del(&crypto_cdev);
@@ -415,5 +375,5 @@ module_exit(crypto_driver_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Student");
-MODULE_DESCRIPTION("DES Encryption and SHA1 Hashing Driver");
-MODULE_VERSION("1.0");
+MODULE_DESCRIPTION("DES Encryption and SHA1 Hashing Driver for CentOS 9 64-bit");
+MODULE_VERSION("2.0");

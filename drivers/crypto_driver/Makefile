@@ -1,8 +1,11 @@
 obj-m += crypto_driver.o
 
-# Kernel build directory (adjust for your CentOS 32-bit system)
+# Kernel build directory for CentOS 9 64-bit
 KERNEL_DIR := /lib/modules/$(shell uname -r)/build
 PWD := $(shell pwd)
+
+# Compiler flags for modern kernel
+EXTRA_CFLAGS += -DCONFIG_64BIT -Wno-unused-variable -Wno-unused-function
 
 all:
 	$(MAKE) -C $(KERNEL_DIR) M=$(PWD) modules

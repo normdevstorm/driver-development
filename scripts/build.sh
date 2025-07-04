@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# Build script cho CentOS 32-bit
+# Build script cho CentOS 9 64-bit
 # Bài tập lớn - Lập trình Driver Linux
 
 set -e  # Exit on any error
 
 echo "=== Build Script for Linux Driver Project ==="
-echo "Building for CentOS 32-bit..."
+echo "Building for CentOS 9 64-bit..."
 echo
 
 # Check if running as root for kernel module operations
@@ -25,13 +25,24 @@ check_kernel_headers() {
     if [ ! -d "$KERNEL_HEADERS" ]; then
         echo "Error: Kernel headers not found at $KERNEL_HEADERS"
         echo "Please install kernel headers:"
-        echo "  yum install kernel-devel"
-        echo "  # or"
-        echo "  yum install kernel-headers kernel-devel"
+        echo "  dnf install kernel-devel kernel-headers"
+        echo "  # For development group:"
+        echo "  dnf groupinstall \"Development Tools\""
         exit 1
     fi
     
     echo "✓ Kernel headers found: $KERNEL_HEADERS"
+    
+    # Check for minimum kernel version (5.14+ for CentOS 9)
+    KERNEL_MAJOR=$(echo $KERNEL_VERSION | cut -d. -f1)
+    KERNEL_MINOR=$(echo $KERNEL_VERSION | cut -d. -f2)
+    
+    if [ "$KERNEL_MAJOR" -lt 5 ] || ([ "$KERNEL_MAJOR" -eq 5 ] && [ "$KERNEL_MINOR" -lt 14 ]); then
+        echo "Warning: Kernel version $KERNEL_VERSION may not be fully compatible."
+        echo "CentOS 9 64-bit requires kernel 5.14 or higher."
+    else
+        echo "✓ Kernel version compatible: $KERNEL_VERSION"
+    fi
 }
 
 # Build crypto driver

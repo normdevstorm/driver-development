@@ -3,24 +3,25 @@
 ## Yêu cầu Hệ thống
 
 ### Phần cứng
-- Máy tính với CentOS 32-bit
-- Ít nhất 512MB RAM
+- Máy tính với CentOS 9 64-bit
+- Ít nhất 2GB RAM (khuyến nghị 4GB+)
 - Bàn phím USB (để test driver USB)
 
 ### Phần mềm
-- CentOS 32-bit (khuyến nghị CentOS 6.x hoặc 7.x)
+- CentOS 9 64-bit (hoặc RHEL 9/Fedora 36+)
 - Kernel headers và development tools
-- GCC compiler
+- GCC compiler (version 11+)
 - Make utility
+- Modern kernel (5.14+)
 
 ## Cài đặt Dependencies
 
 ### 1. Cài đặt kernel headers và build tools
 ```bash
-# CentOS/RHEL
-sudo yum update
-sudo yum groupinstall "Development Tools"
-sudo yum install kernel-devel kernel-headers
+# CentOS 9/RHEL 9
+sudo dnf update
+sudo dnf groupinstall "Development Tools"
+sudo dnf install kernel-devel kernel-headers
 
 # Kiểm tra kernel headers
 ls /lib/modules/$(uname -r)/build

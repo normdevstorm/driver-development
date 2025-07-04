@@ -1,6 +1,6 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99 -pthread
-LDFLAGS = -pthread
+CFLAGS = -Wall -Wextra -std=c99 -pthread -m64 -D_GNU_SOURCE
+LDFLAGS = -pthread -m64
 
 # Source files
 CRYPTO_LIB_SRC = crypto_lib.c

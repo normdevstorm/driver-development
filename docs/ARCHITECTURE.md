@@ -1,10 +1,10 @@
-# Kiến trúc Hệ thống và Thiết kế
+# Kiến trúc Hệ thống và Thiết kế - CentOS 9 64-bit
 
 ## Tổng quan Kiến trúc
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                 User Space                          │
+│                 User Space (64-bit)                 │
 ├─────────────────┬─────────────────┬─────────────────┤
 │   Chat Client   │   Chat Server   │   Test Programs │
 │                 │                 │                 │
@@ -13,14 +13,15 @@
 ├─────────────────────────────────────────────────────┤
 │                System Calls (IOCTL)                │
 ├═════════════════════════════════════════════════════┤
-│                 Kernel Space                        │
+│                 Kernel Space (64-bit)              │
 ├─────────────────┬─────────────────────────────────────┤
 │  Crypto Driver  │        USB Keyboard Driver        │
 │   (DES/SHA1)    │                                   │
 ├─────────────────┼─────────────────────────────────────┤
-│  Crypto API     │           USB Subsystem           │
+│  Modern Crypto  │           USB Subsystem           │
+│  API (skcipher) │                                   │
 ├─────────────────┴─────────────────────────────────────┤
-│                  Linux Kernel                       │
+│                  Linux Kernel 5.14+                │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -29,24 +30,28 @@
 ### 1. Crypto Driver (`crypto_driver.c`)
 
 #### Mục đích
-- Cung cấp DES encryption/decryption trong kernel space
+- Cung cấp DES encryption/decryption trong kernel space sử dụng modern skcipher API
 - Cung cấp SHA1 hashing trong kernel space
-- Tạo interface an toàn cho userspace applications
+- Tạo interface an toàn cho userspace applications với 64-bit compatibility
 
-#### Kiến trúc
+#### Kiến trúc Modern (CentOS 9)
 ```c
-// Main structures
+// Main structures (64-bit compatible)
 struct crypto_data {
-    char *input;      // Input data pointer
-    char *output;     // Output data pointer  
-    size_t length;    // Data length
+    char *input;      // Input data pointer (64-bit)
+    char *output;     // Output data pointer (64-bit) 
+    size_t length;    // Data length (64-bit size_t)
 };
 
 struct hash_data {
-    char *input;         // Input data pointer
-    char *output;        // Output hash pointer
-    size_t input_length; // Input data length
+    char *input;         // Input data pointer (64-bit)
+    char *output;        // Output hash pointer (64-bit)
+    size_t input_length; // Input data length (64-bit size_t)
 };
+
+// Modern crypto contexts
+static struct crypto_skcipher *des_tfm = NULL;  // Modern skcipher API
+static struct crypto_shash *sha1_tfm = NULL;    // Modern shash API
 ```
 
 #### IOCTL Commands
