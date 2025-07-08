@@ -22,6 +22,7 @@ typedef struct {
     GtkWidget *password_entry;
     GtkWidget *server_ip_entry;
     GtkWidget *connect_button;
+    GtkWidget *signup_button;
     GtkWidget *disconnect_button;
     GtkWidget *send_button;
     GtkWidget *status_label;
@@ -36,9 +37,25 @@ static ChatClientGTK *client_app = NULL;
 
 // Forward declarations
 gboolean update_chat_display(gchar *message);
+gboolean update_chat_display_aligned(gchar *message, gboolean is_own_message);
 gboolean update_status(gchar *status);
 int encrypt_message(const char *input, char *output, size_t *output_len);
 int decrypt_message(const char *input, size_t input_len, char *output);
+void on_signup_clicked(GtkButton *button, gpointer user_data);
+
+// Structure to pass both message and alignment info
+typedef struct {
+    gchar *message;
+    gboolean is_own_message;
+} MessageData;
+
+// Wrapper function for g_idle_add
+gboolean update_chat_display_wrapper(gpointer data) {
+    MessageData *msg_data = (MessageData*)data;
+    gboolean result = update_chat_display_aligned(msg_data->message, msg_data->is_own_message);
+    g_free(msg_data);
+    return result;
+}
 
 // Thread for receiving messages
 void* receive_messages(void *arg) {
@@ -77,6 +94,11 @@ void* receive_messages(void *arg) {
 
 // Update chat display (called from main thread)
 gboolean update_chat_display(gchar *message) {
+    return update_chat_display_aligned(message, FALSE);
+}
+
+// Update chat display with alignment
+gboolean update_chat_display_aligned(gchar *message, gboolean is_own_message) {
     if (client_app && client_app->chat_buffer) {
         GtkTextIter iter;
         gtk_text_buffer_get_end_iter(client_app->chat_buffer, &iter);
@@ -86,8 +108,36 @@ gboolean update_chat_display(gchar *message) {
         char timestamp[32];
         strftime(timestamp, sizeof(timestamp), "[%H:%M:%S] ", localtime(&now));
         
-        gtk_text_buffer_insert(client_app->chat_buffer, &iter, timestamp, -1);
-        gtk_text_buffer_insert(client_app->chat_buffer, &iter, message, -1);
+        // Parse message to extract sender and content
+        char *sender = NULL;
+        char *content = message;
+        char *colon_pos = strchr(message, ':');
+        
+        if (colon_pos && !is_own_message) {
+            // For received messages, extract sender
+            *colon_pos = '\0';
+            sender = message;
+            content = colon_pos + 2; // Skip ': '
+        }
+        
+        if (is_own_message) {
+            // Right-align own messages
+            gtk_text_buffer_insert(client_app->chat_buffer, &iter, "                                          ", -1);
+            gtk_text_buffer_insert(client_app->chat_buffer, &iter, timestamp, -1);
+            gtk_text_buffer_insert(client_app->chat_buffer, &iter, "You: ", -1);
+            gtk_text_buffer_insert(client_app->chat_buffer, &iter, content, -1);
+        } else {
+            // Left-align received messages
+            gtk_text_buffer_insert(client_app->chat_buffer, &iter, timestamp, -1);
+            if (sender) {
+                gtk_text_buffer_insert(client_app->chat_buffer, &iter, sender, -1);
+                gtk_text_buffer_insert(client_app->chat_buffer, &iter, ": ", -1);
+                gtk_text_buffer_insert(client_app->chat_buffer, &iter, content, -1);
+            } else {
+                gtk_text_buffer_insert(client_app->chat_buffer, &iter, message, -1);
+            }
+        }
+        
         gtk_text_buffer_insert(client_app->chat_buffer, &iter, "\n", -1);
         
         // Auto-scroll to bottom
@@ -218,6 +268,64 @@ void on_disconnect_clicked(GtkButton *button, gpointer user_data) {
     }
 }
 
+// Signup button callback
+void on_signup_clicked(GtkButton *button, gpointer user_data) {
+    (void)button; // Suppress unused parameter warning
+    ChatClientGTK *app = (ChatClientGTK*)user_data;
+    
+    const char *username = gtk_entry_get_text(GTK_ENTRY(app->username_entry));
+    const char *password = gtk_entry_get_text(GTK_ENTRY(app->password_entry));
+    const char *server_ip = gtk_entry_get_text(GTK_ENTRY(app->server_ip_entry));
+    
+    if (strlen(username) == 0 || strlen(password) == 0) {
+        gtk_label_set_text(GTK_LABEL(app->status_label), "Please enter username and password");
+        return;
+    }
+    
+    // Create socket
+    app->socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (app->socket_fd == -1) {
+        gtk_label_set_text(GTK_LABEL(app->status_label), "Failed to create socket");
+        return;
+    }
+    
+    // Connect to server
+    struct sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(SERVER_PORT);
+    server_addr.sin_addr.s_addr = inet_addr(server_ip);
+    
+    if (connect(app->socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
+        gtk_label_set_text(GTK_LABEL(app->status_label), "Connection failed");
+        close(app->socket_fd);
+        return;
+    }
+    
+    // Send signup request
+    char signup_msg[BUFFER_SIZE];
+    snprintf(signup_msg, sizeof(signup_msg), "SIGNUP:%s:%s", username, password);
+    send(app->socket_fd, signup_msg, strlen(signup_msg), 0);
+    
+    // Wait for signup response
+    char response[BUFFER_SIZE];
+    int bytes_received = recv(app->socket_fd, response, sizeof(response) - 1, 0);
+    if (bytes_received > 0) {
+        response[bytes_received] = '\0';
+        if (strstr(response, "SIGNUP_SUCCESS") == response) {
+            gtk_label_set_text(GTK_LABEL(app->status_label), "Signup successful! Please login.");
+            // Clear password field for security
+            gtk_entry_set_text(GTK_ENTRY(app->password_entry), "");
+        } else {
+            gtk_label_set_text(GTK_LABEL(app->status_label), "Signup failed. Username might already exist.");
+        }
+    } else {
+        gtk_label_set_text(GTK_LABEL(app->status_label), "No response from server");
+    }
+    
+    close(app->socket_fd);
+    app->socket_fd = -1;
+}
+
 // Send message
 void on_send_clicked(GtkButton *button, gpointer user_data) {
     (void)button; // Suppress unused parameter warning
@@ -230,6 +338,12 @@ void on_send_clicked(GtkButton *button, gpointer user_data) {
         
         // Format message with username
         snprintf(full_message, sizeof(full_message), "%s: %s", app->username, message);
+        
+        // Display message on right side (own message)
+        MessageData *msg_data = g_malloc(sizeof(MessageData));
+        msg_data->message = g_strdup(message);
+        msg_data->is_own_message = TRUE;
+        g_idle_add(update_chat_display_wrapper, msg_data);
         
         // Try to encrypt message
         size_t encrypted_len;
@@ -250,7 +364,7 @@ void on_send_clicked(GtkButton *button, gpointer user_data) {
 // Handle Enter key in message entry
 gboolean on_message_key_press(GtkWidget *widget, GdkEventKey *event, gpointer user_data) {
     (void)widget; // Suppress unused parameter warning
-    if (event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter) {
+    if (event->keyval == GDK_Return || event->keyval == GDK_KP_Enter) {
         on_send_clicked(NULL, user_data);
         return TRUE;
     }
@@ -317,10 +431,12 @@ GtkWidget* create_chat_window() {
     // Connection buttons
     GtkWidget *button_hbox = gtk_hbox_new(FALSE, 5);
     client_app->connect_button = gtk_button_new_with_label("Connect");
+    client_app->signup_button = gtk_button_new_with_label("Sign Up");
     client_app->disconnect_button = gtk_button_new_with_label("Disconnect");
     gtk_widget_set_sensitive(client_app->disconnect_button, FALSE);
     
     gtk_box_pack_start(GTK_BOX(button_hbox), client_app->connect_button, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(button_hbox), client_app->signup_button, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(button_hbox), client_app->disconnect_button, TRUE, TRUE, 0);
     gtk_table_attach(GTK_TABLE(connection_table), button_hbox, 0, 2, 3, 4, GTK_EXPAND | GTK_FILL, GTK_FILL, 5, 2);
     
@@ -370,6 +486,7 @@ GtkWidget* create_chat_window() {
     
     // Connect signals
     g_signal_connect(client_app->connect_button, "clicked", G_CALLBACK(on_connect_clicked), client_app);
+    g_signal_connect(client_app->signup_button, "clicked", G_CALLBACK(on_signup_clicked), client_app);
     g_signal_connect(client_app->disconnect_button, "clicked", G_CALLBACK(on_disconnect_clicked), client_app);
     g_signal_connect(client_app->send_button, "clicked", G_CALLBACK(on_send_clicked), client_app);
     g_signal_connect(client_app->message_entry, "key-press-event", G_CALLBACK(on_message_key_press), client_app);

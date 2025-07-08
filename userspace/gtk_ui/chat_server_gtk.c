@@ -47,19 +47,22 @@ typedef struct {
     char password[64];
 } User;
 
-static User users[] = {
+#define MAX_USERS 100
+static User users[MAX_USERS] = {
     {"admin", "admin123"},
     {"user1", "password1"},
     {"user2", "password2"},
     {"test", "test123"}
 };
-static int num_users = sizeof(users) / sizeof(users[0]);
+static int num_users = 4; // Current number of users
 
 // Forward declarations
 gboolean update_log(gchar *message);
 gboolean update_status(gchar *status);
 gboolean update_client_list();
 int decrypt_message(const char *input, size_t input_len, char *output);
+int signup_user(const char *username, const char *password);
+int user_exists(const char *username);
 
 // Authenticate user
 int authenticate_user(const char *username, const char *password) {
@@ -70,6 +73,45 @@ int authenticate_user(const char *username, const char *password) {
         }
     }
     return 0;
+}
+
+// Check if username already exists
+int user_exists(const char *username) {
+    for (int i = 0; i < num_users; i++) {
+        if (strcmp(users[i].username, username) == 0) {
+            return 1; // User exists
+        }
+    }
+    return 0; // User doesn't exist
+}
+
+// Add new user to database
+int signup_user(const char *username, const char *password) {
+    if (num_users >= MAX_USERS) {
+        return -1; // Database full
+    }
+    
+    if (user_exists(username)) {
+        return -2; // User already exists
+    }
+    
+    if (strlen(username) == 0 || strlen(password) == 0) {
+        return -3; // Invalid input
+    }
+    
+    // Add new user
+    strncpy(users[num_users].username, username, sizeof(users[num_users].username) - 1);
+    strncpy(users[num_users].password, password, sizeof(users[num_users].password) - 1);
+    users[num_users].username[sizeof(users[num_users].username) - 1] = '\0';
+    users[num_users].password[sizeof(users[num_users].password) - 1] = '\0';
+    
+    num_users++;
+    
+    char log_msg[256];
+    snprintf(log_msg, sizeof(log_msg), "New user registered: %s", username);
+    g_idle_add((GSourceFunc)update_log, g_strdup(log_msg));
+    
+    return 0; // Success
 }
 
 // Update server log
@@ -237,6 +279,21 @@ void* handle_client(void *arg) {
                         char log_msg[256];
                         snprintf(log_msg, sizeof(log_msg), "Authentication failed for user: %s", username);
                         g_idle_add((GSourceFunc)update_log, g_strdup(log_msg));
+                    }
+                }
+            } else if (strstr(buffer, "SIGNUP:") == buffer) {
+                char *username = buffer + 7;
+                char *password = strchr(username, ':');
+                if (password) {
+                    *password = '\0';
+                    password++;
+                    
+                    // Handle user signup
+                    int signup_result = signup_user(username, password);
+                    if (signup_result == 0) {
+                        send(client_socket, "SIGNUP_SUCCESS", 14, 0);
+                    } else {
+                        send(client_socket, "SIGNUP_FAILED", 13, 0);
                     }
                 }
             }
