@@ -9,6 +9,20 @@ echo "=== Build Script for Linux Driver Project ==="
 echo "Building for CentOS 9 64-bit..."
 echo
 
+# Get the project root directory (parent of scripts)
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+echo "Project root: $PROJECT_ROOT"
+
+# Change to project root directory
+cd "$PROJECT_ROOT"
+
+# Verify we're in the correct directory
+if [ ! -d "drivers" ] || [ ! -d "userspace" ] || [ ! -d "scripts" ]; then
+    echo "Error: Not in project root directory. Expected directories: drivers, userspace, scripts"
+    echo "Current directory: $(pwd)"
+    exit 1
+fi
+
 # Check if running as root for kernel module operations
 check_root() {
     if [ "$EUID" -eq 0 ]; then
@@ -63,6 +77,7 @@ check_gtk_dependencies() {
 build_crypto_driver() {
     echo
     echo "Building crypto driver..."
+    
     cd drivers/crypto_driver
     
     if make clean && make; then
@@ -72,13 +87,14 @@ build_crypto_driver() {
         exit 1
     fi
     
-    cd ../..
+    cd "$PROJECT_ROOT"
 }
 
 # Build USB keyboard driver
 build_usb_driver() {
     echo
     echo "Building USB keyboard driver..."
+    
     cd drivers/usb_keyboard
     
     if make clean && make; then
@@ -88,13 +104,14 @@ build_usb_driver() {
         exit 1
     fi
     
-    cd ../..
+    cd "$PROJECT_ROOT"
 }
 
 # Build userspace applications
 build_userspace() {
     echo
     echo "Building userspace applications..."
+    
     cd userspace
     
     if make clean && make; then
@@ -104,7 +121,7 @@ build_userspace() {
         exit 1
     fi
     
-    cd ..
+    cd "$PROJECT_ROOT"
 }
 
 # Main build function
