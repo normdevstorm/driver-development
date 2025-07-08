@@ -87,6 +87,31 @@ sudo ./scripts/unload_drivers.sh
 - ✅ Handle key press events
 - ✅ Output key codes
 
+## Tính năng chính
+
+### 🔐 RSA Key Exchange (Mới!)
+- Trao đổi khóa RSA tự động khi client kết nối
+- Tạo khóa DES ngẫu nhiên cho mỗi phiên
+- Mã hóa toàn bộ giao tiếp với khóa được trao đổi
+- Hỗ trợ cả giao diện dòng lệnh và GTK
+
+### 🛡️ Mã hóa và bảo mật
+- Driver kernel cho mã hóa DES và SHA1
+- Xác thực người dùng với mật khẩu được hash
+- Mã hóa tin nhắn trong kernel space
+- Giao thức trao đổi khóa an toàn
+
+### 💬 Ứng dụng chat
+- Server đa luồng hỗ trợ nhiều client
+- Giao diện GTK user-friendly
+- Broadcast tin nhắn real-time
+- Quản lý user và xác thực
+
+### 🔌 Driver thiết bị
+- Driver USB keyboard cho CentOS 64-bit
+- API crypto kernel hoàn chỉnh
+- IOCTL interface cho userspace
+
 ## Tài liệu tham khảo
 
 - [Linux Device Drivers](https://lwn.net/Kernel/LDD3/)
