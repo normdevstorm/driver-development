@@ -204,6 +204,25 @@ void on_connect_clicked(GtkButton *button, gpointer user_data) {
         return;
     }
     
+    // Perform RSA key exchange
+    gtk_label_set_text(GTK_LABEL(app->status_label), "Performing key exchange...");
+    char shared_des_key[DES_KEY_SIZE];
+    
+    if (perform_key_exchange_client(app->socket_fd, shared_des_key) < 0) {
+        gtk_label_set_text(GTK_LABEL(app->status_label), "Key exchange failed");
+        close(app->socket_fd);
+        return;
+    }
+    
+    // Set the exchanged DES key for encryption
+    if (crypto_set_key(shared_des_key) < 0) {
+        gtk_label_set_text(GTK_LABEL(app->status_label), "Failed to set encryption key");
+        close(app->socket_fd);
+        return;
+    }
+    
+    gtk_label_set_text(GTK_LABEL(app->status_label), "Authenticating...");
+    
     // Send authentication
     char auth_msg[BUFFER_SIZE];
     snprintf(auth_msg, sizeof(auth_msg), "AUTH:%s:%s", username, password);
@@ -300,6 +319,25 @@ void on_signup_clicked(GtkButton *button, gpointer user_data) {
         close(app->socket_fd);
         return;
     }
+    
+    // Perform RSA key exchange for signup
+    gtk_label_set_text(GTK_LABEL(app->status_label), "Performing key exchange...");
+    char shared_des_key[DES_KEY_SIZE];
+    
+    if (perform_key_exchange_client(app->socket_fd, shared_des_key) < 0) {
+        gtk_label_set_text(GTK_LABEL(app->status_label), "Key exchange failed");
+        close(app->socket_fd);
+        return;
+    }
+    
+    // Set the exchanged DES key for encryption
+    if (crypto_set_key(shared_des_key) < 0) {
+        gtk_label_set_text(GTK_LABEL(app->status_label), "Failed to set encryption key");
+        close(app->socket_fd);
+        return;
+    }
+    
+    gtk_label_set_text(GTK_LABEL(app->status_label), "Signing up...");
     
     // Send signup request
     char signup_msg[BUFFER_SIZE];
@@ -562,6 +600,9 @@ int main(int argc, char *argv[]) {
     gtk_main();
     
     if (client_app) {
+        if (client_app->connected) {
+            close(client_app->socket_fd);
+        }
         g_free(client_app);
     }
     

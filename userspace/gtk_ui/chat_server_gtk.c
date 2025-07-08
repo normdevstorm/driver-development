@@ -236,12 +236,36 @@ void* handle_client(void *arg) {
     
     char buffer[BUFFER_SIZE];
     char decrypted_msg[BUFFER_SIZE];
+    char shared_des_key[DES_KEY_SIZE];
     int client_index = find_client_index(client_socket);
     
     if (client_index == -1) {
         close(client_socket);
         return NULL;
     }
+    
+    // Perform RSA key exchange with client
+    char log_msg[256];
+    snprintf(log_msg, sizeof(log_msg), "Starting key exchange with client %d", client_socket);
+    g_idle_add((GSourceFunc)update_log, g_strdup(log_msg));
+    
+    if (perform_key_exchange_server(client_socket, shared_des_key) < 0) {
+        snprintf(log_msg, sizeof(log_msg), "Key exchange failed with client %d", client_socket);
+        g_idle_add((GSourceFunc)update_log, g_strdup(log_msg));
+        close(client_socket);
+        return NULL;
+    }
+    
+    // Set the exchanged DES key for this client session
+    if (crypto_set_key(shared_des_key) < 0) {
+        snprintf(log_msg, sizeof(log_msg), "Failed to set shared DES key for client %d", client_socket);
+        g_idle_add((GSourceFunc)update_log, g_strdup(log_msg));
+        close(client_socket);
+        return NULL;
+    }
+    
+    snprintf(log_msg, sizeof(log_msg), "Key exchange completed with client %d", client_socket);
+    g_idle_add((GSourceFunc)update_log, g_strdup(log_msg));
     
     while (server_app->server_running) {
         int bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
@@ -636,14 +660,6 @@ int main(int argc, char *argv[]) {
     // Initialize crypto library
     if (crypto_init() < 0) {
         fprintf(stderr, "Failed to initialize crypto library\n");
-        return 1;
-    }
-    
-    // Set default key
-    char key[8] = "mykey123";
-    if (crypto_set_key(key) < 0) {
-        fprintf(stderr, "Failed to set encryption key\n");
-        crypto_cleanup();
         return 1;
     }
     
