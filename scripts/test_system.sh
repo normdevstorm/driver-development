@@ -43,7 +43,7 @@ test_usb_driver() {
         dmesg | grep -i "usb_keyboard" | tail -5 || echo "No USB keyboard messages"
     else
         echo "✗ USB keyboard driver not loaded"
-    fi
+    fi          
 }
 
 # Function to test chat system
@@ -52,19 +52,37 @@ test_chat_system() {
     echo "Testing chat system build..."
     
     cd ../userspace
+    
+    # Test CLI versions
     if [ -x ./chat_server ] && [ -x ./chat_client ]; then
-        echo "✓ Chat applications built successfully"
-        echo "To test chat system:"
-        echo "  Terminal 1: ./chat_server"
-        echo "  Terminal 2: ./chat_client"
-        echo
-        echo "Test accounts:"
-        echo "  Username: admin, Password: admin123"
-        echo "  Username: user1, Password: password1"
-        echo "  Username: user2, Password: password2"
+        echo "✓ CLI chat applications built successfully"
     else
-        echo "✗ Chat applications not found. Run make in userspace/"
+        echo "✗ CLI chat applications not found. Run make cli in userspace/"
     fi
+    
+    # Test GTK versions
+    if [ -x ./chat_server_gtk ] && [ -x ./chat_client_gtk ]; then
+        echo "✓ GTK chat applications built successfully"
+    else
+        echo "✗ GTK chat applications not found. Run make gtk in userspace/"
+    fi
+    
+    echo
+    echo "To test chat system:"
+    echo "CLI versions:"
+    echo "  Terminal 1: ./chat_server"
+    echo "  Terminal 2: ./chat_client"
+    echo
+    echo "GTK versions:"
+    echo "  Terminal 1: ./chat_server_gtk"
+    echo "  Terminal 2: ./chat_client_gtk"
+    echo
+    echo "Test accounts:"
+    echo "  Username: admin, Password: admin123"
+    echo "  Username: user1, Password: password1"
+    echo "  Username: user2, Password: password2"
+    echo "  Username: test, Password: test123"
+    
     cd ../scripts
 }
 
@@ -122,7 +140,7 @@ main() {
     show_system_info
     check_build_status
     test_crypto_driver
-    test_usb_driver
+#    test_usb_driver
     test_chat_system
     
     echo

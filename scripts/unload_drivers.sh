@@ -58,7 +58,7 @@ check_cleanup() {
 main() {
     echo "Unloading all custom drivers..."
     
-    unload_usb_driver
+#    unload_usb_driver
     unload_crypto_driver
     check_cleanup
     

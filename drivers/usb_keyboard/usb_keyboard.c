@@ -129,7 +129,7 @@ static int usb_kbd_probe(struct usb_interface *interface, const struct usb_devic
     }
     
     pipe = usb_rcvintpipe(udev, endpoint->bEndpointAddress);
-    maxp = usb_maxpacket(udev, pipe, usb_pipeout(pipe));
+    maxp = usb_maxpacket(udev, pipe);
     
     /* Allocate keyboard structure */
     kbd = kzalloc(sizeof(struct usb_keyboard), GFP_KERNEL);
@@ -178,7 +178,13 @@ static int usb_kbd_probe(struct usb_interface *interface, const struct usb_devic
     /* Configure input device */
     input_dev->name = kbd->name;
     input_dev->phys = kbd->phys;
-    usb_to_input_id(udev, &input_dev->id);
+    
+    /* Set input device ID manually */
+    input_dev->id.bustype = BUS_USB;
+    input_dev->id.vendor = le16_to_cpu(udev->descriptor.idVendor);
+    input_dev->id.product = le16_to_cpu(udev->descriptor.idProduct);
+    input_dev->id.version = le16_to_cpu(udev->descriptor.bcdDevice);
+    
     input_dev->dev.parent = &interface->dev;
     
     input_set_drvdata(input_dev, kbd);

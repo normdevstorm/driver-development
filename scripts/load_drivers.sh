@@ -155,7 +155,7 @@ main() {
     
     load_crypto_modules
     load_crypto_driver
-    load_usb_driver
+#    load_usb_driver
     check_modules
     show_devices
     

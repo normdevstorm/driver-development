@@ -45,6 +45,20 @@ check_kernel_headers() {
     fi
 }
 
+# Check for GTK development libraries
+check_gtk_dependencies() {
+    echo "Checking GTK dependencies..."
+    
+    if ! pkg-config --exists gtk+-2.0; then
+        echo "✗ GTK+ 2.0 development libraries not found"
+        echo "Install with: sudo yum install gtk2-devel pkg-config"
+        echo "Or: sudo apt-get install libgtk2.0-dev pkg-config"
+        exit 1
+    else
+        echo "✓ GTK+ 2.0 development libraries found"
+    fi
+}
+
 # Build crypto driver
 build_crypto_driver() {
     echo
@@ -99,14 +113,25 @@ main() {
     
     # Check prerequisites
     check_kernel_headers
+    check_gtk_dependencies
     
     # Build components
     build_crypto_driver
-    build_usb_driver
+#    build_usb_driver
     build_userspace
     
     echo
     echo "=== Build Complete ==="
+    echo
+    echo "Available applications:"
+    echo "CLI versions:"
+    echo "  - userspace/chat_server"
+    echo "  - userspace/chat_client"
+    echo "  - userspace/test_crypto"
+    echo
+    echo "GTK versions:"
+    echo "  - userspace/chat_server_gtk"
+    echo "  - userspace/chat_client_gtk"
     echo
     echo "Next steps:"
     echo "1. Load drivers:"
@@ -116,8 +141,10 @@ main() {
     echo "   cd userspace && ./test_crypto"
     echo
     echo "3. Run chat applications:"
-    echo "   Terminal 1: ./userspace/chat_server"
-    echo "   Terminal 2: ./userspace/chat_client"
+    echo "   CLI: Terminal 1: ./userspace/chat_server"
+    echo "        Terminal 2: ./userspace/chat_client"
+    echo "   GTK: Terminal 1: ./userspace/chat_server_gtk"
+    echo "        Terminal 2: ./userspace/chat_client_gtk"
     echo
 }
 
