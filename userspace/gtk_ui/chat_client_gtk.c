@@ -1,4 +1,5 @@
 #include <gtk/gtk.h>
+#include <gdk/gdkkeysyms.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +8,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <time.h>
 #include "../crypto_lib.h"
 
 #define SERVER_PORT 8080
@@ -35,6 +37,8 @@ static ChatClientGTK *client_app = NULL;
 // Forward declarations
 gboolean update_chat_display(gchar *message);
 gboolean update_status(gchar *status);
+int encrypt_message(const char *input, char *output, size_t *output_len);
+int decrypt_message(const char *input, size_t input_len, char *output);
 
 // Thread for receiving messages
 void* receive_messages(void *arg) {
@@ -57,7 +61,7 @@ void* receive_messages(void *arg) {
         if (strstr(buffer, "[ENCRYPTED]") == buffer) {
             // Remove [ENCRYPTED] prefix and decrypt
             char *encrypted_data = buffer + strlen("[ENCRYPTED]");
-            if (decrypt_message(encrypted_data, decrypted_msg, sizeof(decrypted_msg)) == 0) {
+            if (decrypt_message(encrypted_data, strlen(encrypted_data), decrypted_msg) == 0) {
                 g_idle_add((GSourceFunc)update_chat_display, g_strdup(decrypted_msg));
             } else {
                 g_idle_add((GSourceFunc)update_chat_display, g_strdup("Failed to decrypt message"));
@@ -106,6 +110,7 @@ gboolean update_status(gchar *status) {
 
 // Connect to server
 void on_connect_clicked(GtkButton *button, gpointer user_data) {
+    (void)button; // Suppress unused parameter warning
     ChatClientGTK *app = (ChatClientGTK*)user_data;
     
     const char *username = gtk_entry_get_text(GTK_ENTRY(app->username_entry));
@@ -192,6 +197,7 @@ void on_connect_clicked(GtkButton *button, gpointer user_data) {
 
 // Disconnect from server
 void on_disconnect_clicked(GtkButton *button, gpointer user_data) {
+    (void)button; // Suppress unused parameter warning
     ChatClientGTK *app = (ChatClientGTK*)user_data;
     
     if (app->connected) {
@@ -214,6 +220,7 @@ void on_disconnect_clicked(GtkButton *button, gpointer user_data) {
 
 // Send message
 void on_send_clicked(GtkButton *button, gpointer user_data) {
+    (void)button; // Suppress unused parameter warning
     ChatClientGTK *app = (ChatClientGTK*)user_data;
     
     const char *message = gtk_entry_get_text(GTK_ENTRY(app->message_entry));
@@ -225,7 +232,8 @@ void on_send_clicked(GtkButton *button, gpointer user_data) {
         snprintf(full_message, sizeof(full_message), "%s: %s", app->username, message);
         
         // Try to encrypt message
-        if (encrypt_message(full_message, encrypted_msg, sizeof(encrypted_msg)) == 0) {
+        size_t encrypted_len;
+        if (encrypt_message(full_message, encrypted_msg, &encrypted_len) == 0) {
             // Send encrypted message with prefix
             char final_message[BUFFER_SIZE];
             snprintf(final_message, sizeof(final_message), "[ENCRYPTED]%s", encrypted_msg);
@@ -241,7 +249,8 @@ void on_send_clicked(GtkButton *button, gpointer user_data) {
 
 // Handle Enter key in message entry
 gboolean on_message_key_press(GtkWidget *widget, GdkEventKey *event, gpointer user_data) {
-    if (event->keyval == GDK_Return || event->keyval == GDK_KP_Enter) {
+    (void)widget; // Suppress unused parameter warning
+    if (event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter) {
         on_send_clicked(NULL, user_data);
         return TRUE;
     }
@@ -250,6 +259,8 @@ gboolean on_message_key_press(GtkWidget *widget, GdkEventKey *event, gpointer us
 
 // Handle window close
 gboolean on_window_delete(GtkWidget *widget, GdkEvent *event, gpointer user_data) {
+    (void)widget; // Suppress unused parameter warning
+    (void)event;  // Suppress unused parameter warning
     ChatClientGTK *app = (ChatClientGTK*)user_data;
     
     if (app->connected) {
@@ -367,7 +378,65 @@ GtkWidget* create_chat_window() {
     return client_app->window;
 }
 
+// Encrypt message function
+int encrypt_message(const char *input, char *output, size_t *output_len)
+{
+    char padded_input[BUFFER_SIZE];
+    char encrypted_binary[BUFFER_SIZE];
+    size_t padded_len;
+    
+    padded_len = crypto_pad_data(input, padded_input, strlen(input));
+    
+    if (crypto_encrypt(padded_input, encrypted_binary, padded_len) < 0) {
+        return -1;
+    }
+    
+    // Convert binary encrypted data to hex string
+    crypto_bin_to_hex(encrypted_binary, padded_len, output);
+    *output_len = padded_len * 2; // Hex string is twice the length
+    
+    return 0;
+}
+
+// Decrypt message function
+int decrypt_message(const char *input, size_t input_len, char *output)
+{
+    char encrypted_binary[BUFFER_SIZE];
+    char decrypted_padded[BUFFER_SIZE];
+    size_t unpadded_len;
+    size_t binary_len;
+    
+    // Convert hex string back to binary
+    binary_len = crypto_hex_to_bin(input, encrypted_binary);
+    if (binary_len == 0) {
+        return -1;
+    }
+    
+    if (crypto_decrypt(encrypted_binary, decrypted_padded, binary_len) < 0) {
+        return -1;
+    }
+    
+    unpadded_len = crypto_unpad_data(decrypted_padded, output, binary_len);
+    output[unpadded_len] = '\0';
+    
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
+    // Initialize crypto library
+    if (crypto_init() < 0) {
+        fprintf(stderr, "Failed to initialize crypto library\n");
+        return 1;
+    }
+    
+    // Set default key
+    char key[8] = "mykey123";
+    if (crypto_set_key(key) < 0) {
+        fprintf(stderr, "Failed to set encryption key\n");
+        crypto_cleanup();
+        return 1;
+    }
+    
     gtk_init(&argc, &argv);
     
     GtkWidget *window = create_chat_window();
@@ -379,5 +448,6 @@ int main(int argc, char *argv[]) {
         g_free(client_app);
     }
     
+    crypto_cleanup();
     return 0;
 }

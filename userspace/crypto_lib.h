@@ -38,5 +38,7 @@ int crypto_hash(const char *input, size_t input_length, char *output);
 size_t crypto_pad_data(const char *input, char *output, size_t length);
 size_t crypto_unpad_data(const char *input, char *output, size_t length);
 void crypto_print_hex(const char *data, size_t length);
+void crypto_bin_to_hex(const char *bin, size_t bin_len, char *hex);
+size_t crypto_hex_to_bin(const char *hex, char *bin);
 
 #endif /* CRYPTO_LIB_H */

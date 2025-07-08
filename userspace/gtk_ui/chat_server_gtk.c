@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <signal.h>
+#include <time.h>
 #include "../crypto_lib.h"
 
 #define SERVER_PORT 8080
@@ -58,6 +59,7 @@ static int num_users = sizeof(users) / sizeof(users[0]);
 gboolean update_log(gchar *message);
 gboolean update_status(gchar *status);
 gboolean update_client_list();
+int decrypt_message(const char *input, size_t input_len, char *output);
 
 // Authenticate user
 int authenticate_user(const char *username, const char *password) {
@@ -245,7 +247,7 @@ void* handle_client(void *arg) {
             // Check if message is encrypted
             if (strstr(buffer, "[ENCRYPTED]") == buffer) {
                 char *encrypted_data = buffer + strlen("[ENCRYPTED]");
-                if (decrypt_message(encrypted_data, decrypted_msg, sizeof(decrypted_msg)) == 0) {
+                if (decrypt_message(encrypted_data, strlen(encrypted_data), decrypted_msg) == 0) {
                     message_to_broadcast = decrypted_msg;
                     
                     char log_msg[512];
@@ -371,6 +373,7 @@ void* server_main(void *arg) {
 
 // Start server
 void on_start_clicked(GtkButton *button, gpointer user_data) {
+    (void)button; // Suppress unused parameter warning
     ChatServerGTK *app = (ChatServerGTK*)user_data;
     
     if (app->server_running) {
@@ -396,6 +399,7 @@ void on_start_clicked(GtkButton *button, gpointer user_data) {
 
 // Stop server
 void on_stop_clicked(GtkButton *button, gpointer user_data) {
+    (void)button; // Suppress unused parameter warning
     ChatServerGTK *app = (ChatServerGTK*)user_data;
     
     if (!app->server_running) {
@@ -432,6 +436,8 @@ void on_stop_clicked(GtkButton *button, gpointer user_data) {
 
 // Handle window close
 gboolean on_window_delete(GtkWidget *widget, GdkEvent *event, gpointer user_data) {
+    (void)widget; // Suppress unused parameter warning
+    (void)event;  // Suppress unused parameter warning
     ChatServerGTK *app = (ChatServerGTK*)user_data;
     
     if (app->server_running) {
@@ -545,9 +551,44 @@ GtkWidget* create_server_window() {
     return server_app->window;
 }
 
+// Decrypt message function
+int decrypt_message(const char *input, size_t input_len, char *output)
+{
+    char encrypted_binary[BUFFER_SIZE];
+    char decrypted_padded[BUFFER_SIZE];
+    size_t unpadded_len;
+    size_t binary_len;
+    
+    // Convert hex string back to binary
+    binary_len = crypto_hex_to_bin(input, encrypted_binary);
+    if (binary_len == 0) {
+        return -1;
+    }
+    
+    if (crypto_decrypt(encrypted_binary, decrypted_padded, binary_len) < 0) {
+        return -1;
+    }
+    
+    unpadded_len = crypto_unpad_data(decrypted_padded, output, binary_len);
+    output[unpadded_len] = '\0';
+    
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
-    // Ignore SIGPIPE signal
-    signal(SIGPIPE, SIG_IGN);
+    // Initialize crypto library
+    if (crypto_init() < 0) {
+        fprintf(stderr, "Failed to initialize crypto library\n");
+        return 1;
+    }
+    
+    // Set default key
+    char key[8] = "mykey123";
+    if (crypto_set_key(key) < 0) {
+        fprintf(stderr, "Failed to set encryption key\n");
+        crypto_cleanup();
+        return 1;
+    }
     
     gtk_init(&argc, &argv);
     
@@ -561,5 +602,6 @@ int main(int argc, char *argv[]) {
         g_free(server_app);
     }
     
+    crypto_cleanup();
     return 0;
 }

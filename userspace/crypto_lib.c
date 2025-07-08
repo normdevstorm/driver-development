@@ -173,3 +173,29 @@ void crypto_print_hex(const char *data, size_t length)
     }
     printf("\n");
 }
+
+// Utility function to convert binary data to hex string
+void crypto_bin_to_hex(const char *bin, size_t bin_len, char *hex) {
+    const char hex_chars[] = "0123456789abcdef";
+    for (size_t i = 0; i < bin_len; i++) {
+        unsigned char byte = (unsigned char)bin[i];
+        hex[i * 2] = hex_chars[byte >> 4];
+        hex[i * 2 + 1] = hex_chars[byte & 0x0f];
+    }
+    hex[bin_len * 2] = '\0';
+}
+
+// Utility function to convert hex string to binary data
+size_t crypto_hex_to_bin(const char *hex, char *bin) {
+    size_t hex_len = strlen(hex);
+    if (hex_len % 2 != 0) {
+        return 0; // Invalid hex string
+    }
+    
+    size_t bin_len = hex_len / 2;
+    for (size_t i = 0; i < bin_len; i++) {
+        char hex_byte[3] = {hex[i * 2], hex[i * 2 + 1], '\0'};
+        bin[i] = (char)strtol(hex_byte, NULL, 16);
+    }
+    return bin_len;
+}
