@@ -1,0 +1,1 @@
+cmd_/home/normservercentos/Documents/project/driver-development/drivers/crypto_driver/Module.symvers := sed 's/ko$$/o/' /home/normservercentos/Documents/project/driver-development/drivers/crypto_driver/modules.order | scripts/mod/modpost -m -a  -o /home/normservercentos/Documents/project/driver-development/drivers/crypto_driver/Module.symvers -e -i Module.symvers   -T -

@@ -69,14 +69,6 @@ int main()
         exit(1);
     }
     
-    // Set default DES key
-    const char des_key[DES_KEY_SIZE] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
-    if (crypto_set_key(des_key) < 0) {
-        fprintf(stderr, "Failed to set DES key\n");
-        crypto_cleanup();
-        exit(1);
-    }
-    
     // Initialize user database
     initialize_users();
     
@@ -195,8 +187,27 @@ void *client_handler(void *arg)
     char encrypted_response[BUFFER_SIZE];
     char username[USERNAME_SIZE];
     char password[PASSWORD_SIZE];
+    char shared_des_key[DES_KEY_SIZE];
     size_t encrypted_len;
     ssize_t bytes_received;
+    
+    // RSA Key Exchange phase
+    printf("Starting key exchange with client %s:%d\n", 
+           inet_ntoa(client->address.sin_addr), ntohs(client->address.sin_port));
+    
+    if (perform_key_exchange_server(client->socket, shared_des_key) < 0) {
+        fprintf(stderr, "Key exchange failed with client\n");
+        goto cleanup;
+    }
+    
+    // Set the exchanged DES key for this client session
+    if (crypto_set_key(shared_des_key) < 0) {
+        fprintf(stderr, "Failed to set shared DES key\n");
+        goto cleanup;
+    }
+    
+    printf("Key exchange completed, using shared DES key for client %s:%d\n",
+           inet_ntoa(client->address.sin_addr), ntohs(client->address.sin_port));
     
     // Authentication phase
     send(client->socket, "USERNAME:", 9, 0);

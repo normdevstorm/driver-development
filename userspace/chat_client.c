@@ -34,6 +34,7 @@ int main()
     char message[BUFFER_SIZE];
     char encrypted_message[BUFFER_SIZE];
     char buffer[BUFFER_SIZE];
+    char shared_des_key[DES_KEY_SIZE];
     size_t encrypted_len;
     ssize_t bytes_received;
     
@@ -42,14 +43,6 @@ int main()
     // Initialize crypto driver
     if (crypto_init() < 0) {
         fprintf(stderr, "Failed to initialize crypto driver\n");
-        exit(1);
-    }
-    
-    // Set default DES key (same as server)
-    const char des_key[DES_KEY_SIZE] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
-    if (crypto_set_key(des_key) < 0) {
-        fprintf(stderr, "Failed to set DES key\n");
-        crypto_cleanup();
         exit(1);
     }
     
@@ -85,6 +78,26 @@ int main()
     }
     
     printf("Connected to chat server\n");
+    
+    // RSA Key Exchange phase
+    printf("Starting key exchange with server...\n");
+    
+    if (perform_key_exchange_client(client_socket, shared_des_key) < 0) {
+        fprintf(stderr, "Key exchange failed\n");
+        close(client_socket);
+        crypto_cleanup();
+        exit(1);
+    }
+    
+    // Set the exchanged DES key for this session
+    if (crypto_set_key(shared_des_key) < 0) {
+        fprintf(stderr, "Failed to set shared DES key\n");
+        close(client_socket);
+        crypto_cleanup();
+        exit(1);
+    }
+    
+    printf("Key exchange completed, using shared DES key\n");
     
     // Authentication
     // Wait for username prompt

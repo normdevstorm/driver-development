@@ -21,6 +21,8 @@
 #define DES_KEY_SIZE 8
 #define DES_BLOCK_SIZE 8
 #define SHA1_DIGEST_SIZE 20
+#define RSA_KEY_SIZE 128  // 1024-bit RSA key
+#define RSA_BLOCK_SIZE 128
 
 // IOCTL commands
 #define CRYPTO_IOC_MAGIC 'k'
@@ -28,6 +30,9 @@
 #define CRYPTO_IOC_DECRYPT _IOWR(CRYPTO_IOC_MAGIC, 2, struct crypto_data)
 #define CRYPTO_IOC_HASH _IOWR(CRYPTO_IOC_MAGIC, 3, struct hash_data)
 #define CRYPTO_IOC_SET_KEY _IOW(CRYPTO_IOC_MAGIC, 4, char[DES_KEY_SIZE])
+#define CRYPTO_IOC_RSA_KEYGEN _IOWR(CRYPTO_IOC_MAGIC, 5, struct rsa_key)
+#define CRYPTO_IOC_RSA_ENCRYPT _IOWR(CRYPTO_IOC_MAGIC, 6, struct rsa_data)
+#define CRYPTO_IOC_RSA_DECRYPT _IOWR(CRYPTO_IOC_MAGIC, 7, struct rsa_data)
 
 struct crypto_data {
     char *input;
@@ -39,6 +44,24 @@ struct hash_data {
     char *input;
     char *output;
     size_t input_length;
+};
+
+// RSA key structures
+struct rsa_key {
+    unsigned char n[RSA_KEY_SIZE];    // modulus
+    unsigned char e[RSA_KEY_SIZE];    // public exponent
+    unsigned char d[RSA_KEY_SIZE];    // private exponent
+    unsigned char p[RSA_KEY_SIZE/2];  // prime p
+    unsigned char q[RSA_KEY_SIZE/2];  // prime q
+    size_t key_size;
+};
+
+struct rsa_data {
+    char *input;
+    char *output;
+    size_t input_length;
+    size_t output_length;
+    struct rsa_key *key;
 };
 
 static int major_number;
@@ -58,6 +81,11 @@ static int crypto_release(struct inode *, struct file *);
 static ssize_t crypto_read(struct file *, char __user *, size_t, loff_t *);
 static ssize_t crypto_write(struct file *, const char __user *, size_t, loff_t *);
 static long crypto_ioctl(struct file *, unsigned int, unsigned long);
+
+// RSA function prototypes
+static int rsa_generate_keypair(struct rsa_key *public_key, struct rsa_key *private_key);
+static int rsa_encrypt(const char *input, char *output, size_t input_len, size_t *output_len, struct rsa_key *key);
+static int rsa_decrypt(const char *input, char *output, size_t input_len, size_t *output_len, struct rsa_key *key);
 
 static struct file_operations crypto_fops = {
     .owner = THIS_MODULE,
@@ -265,6 +293,105 @@ static long crypto_ioctl(struct file *filep, unsigned int cmd, unsigned long arg
         ret = crypto_skcipher_setkey(des_tfm, des_key, DES_KEY_SIZE);
         break;
         
+    case CRYPTO_IOC_RSA_KEYGEN:
+        {
+            struct rsa_key public_key, private_key;
+            
+            ret = rsa_generate_keypair(&public_key, &private_key);
+            if (ret == 0) {
+                // For simplicity, return the public key
+                if (copy_to_user((struct rsa_key __user *)arg, &public_key, sizeof(struct rsa_key)))
+                    ret = -EFAULT;
+            }
+        }
+        break;
+        
+    case CRYPTO_IOC_RSA_ENCRYPT:
+        {
+            struct rsa_data rsa_data;
+            struct rsa_key kernel_key;
+            char *kernel_input, *kernel_output;
+            size_t output_len;
+            
+            if (copy_from_user(&rsa_data, (struct rsa_data __user *)arg, sizeof(rsa_data)))
+                return -EFAULT;
+                
+            if (copy_from_user(&kernel_key, rsa_data.key, sizeof(struct rsa_key)))
+                return -EFAULT;
+            
+            kernel_input = kzalloc(rsa_data.input_length, GFP_KERNEL);
+            kernel_output = kzalloc(RSA_BLOCK_SIZE, GFP_KERNEL);
+            if (!kernel_input || !kernel_output) {
+                kfree(kernel_input);
+                kfree(kernel_output);
+                return -ENOMEM;
+            }
+            
+            if (copy_from_user(kernel_input, rsa_data.input, rsa_data.input_length)) {
+                kfree(kernel_input);
+                kfree(kernel_output);
+                return -EFAULT;
+            }
+            
+            ret = rsa_encrypt(kernel_input, kernel_output, rsa_data.input_length, &output_len, &kernel_key);
+            if (ret == 0) {
+                if (copy_to_user(rsa_data.output, kernel_output, output_len))
+                    ret = -EFAULT;
+                else {
+                    rsa_data.output_length = output_len;
+                    if (copy_to_user((struct rsa_data __user *)arg, &rsa_data, sizeof(rsa_data)))
+                        ret = -EFAULT;
+                }
+            }
+            
+            kfree(kernel_input);
+            kfree(kernel_output);
+        }
+        break;
+        
+    case CRYPTO_IOC_RSA_DECRYPT:
+        {
+            struct rsa_data rsa_data;
+            struct rsa_key kernel_key;
+            char *kernel_input, *kernel_output;
+            size_t output_len;
+            
+            if (copy_from_user(&rsa_data, (struct rsa_data __user *)arg, sizeof(rsa_data)))
+                return -EFAULT;
+                
+            if (copy_from_user(&kernel_key, rsa_data.key, sizeof(struct rsa_key)))
+                return -EFAULT;
+            
+            kernel_input = kzalloc(rsa_data.input_length, GFP_KERNEL);
+            kernel_output = kzalloc(RSA_BLOCK_SIZE, GFP_KERNEL);
+            if (!kernel_input || !kernel_output) {
+                kfree(kernel_input);
+                kfree(kernel_output);
+                return -ENOMEM;
+            }
+            
+            if (copy_from_user(kernel_input, rsa_data.input, rsa_data.input_length)) {
+                kfree(kernel_input);
+                kfree(kernel_output);
+                return -EFAULT;
+            }
+            
+            ret = rsa_decrypt(kernel_input, kernel_output, rsa_data.input_length, &output_len, &kernel_key);
+            if (ret == 0) {
+                if (copy_to_user(rsa_data.output, kernel_output, output_len))
+                    ret = -EFAULT;
+                else {
+                    rsa_data.output_length = output_len;
+                    if (copy_to_user((struct rsa_data __user *)arg, &rsa_data, sizeof(rsa_data)))
+                        ret = -EFAULT;
+                }
+            }
+            
+            kfree(kernel_input);
+            kfree(kernel_output);
+        }
+        break;
+        
     default:
         return -EINVAL;
     }
@@ -377,3 +504,85 @@ MODULE_DESCRIPTION("DES Encryption and SHA1 Hashing Driver for CentOS 9 64-bit")
 MODULE_VERSION("2.0");
 MODULE_DESCRIPTION("DES Encryption and SHA1 Hashing Driver for CentOS 9 64-bit");
 MODULE_VERSION("2.0");
+
+// Simple RSA operations (for demonstration - not cryptographically secure)
+static int rsa_generate_keypair(struct rsa_key *public_key, struct rsa_key *private_key)
+{
+    int i;
+    
+    // Initialize keys
+    memset(public_key, 0, sizeof(struct rsa_key));
+    memset(private_key, 0, sizeof(struct rsa_key));
+    
+    public_key->key_size = RSA_KEY_SIZE;
+    private_key->key_size = RSA_KEY_SIZE;
+    
+    // Generate random values for demonstration
+    get_random_bytes(public_key->n, RSA_KEY_SIZE);
+    get_random_bytes(public_key->e, RSA_KEY_SIZE);
+    get_random_bytes(private_key->d, RSA_KEY_SIZE);
+    
+    // Copy modulus
+    memcpy(private_key->n, public_key->n, RSA_KEY_SIZE);
+    
+    // Set simple public exponent
+    for (i = 0; i < RSA_KEY_SIZE; i++) {
+        public_key->e[i] = (i < 4) ? 0x01 : 0x00;
+        private_key->d[i] = (i < 4) ? 0x01 : 0x00;
+    }
+    
+    return 0;
+}
+
+static int rsa_encrypt(const char *input, char *output, size_t input_len, size_t *output_len, struct rsa_key *key)
+{
+    size_t i;
+    
+    if (input_len > RSA_BLOCK_SIZE - 11) {
+        return -EINVAL;
+    }
+    
+    // Simple XOR encryption for demonstration
+    *output_len = RSA_BLOCK_SIZE;
+    memcpy(output, input, input_len);
+    
+    // Pad to RSA block size
+    for (i = input_len; i < RSA_BLOCK_SIZE; i++) {
+        output[i] = (char)(RSA_BLOCK_SIZE - input_len);
+    }
+    
+    // Simple XOR with key
+    for (i = 0; i < RSA_BLOCK_SIZE; i++) {
+        output[i] ^= key->e[i % RSA_KEY_SIZE];
+    }
+    
+    return 0;
+}
+
+static int rsa_decrypt(const char *input, char *output, size_t input_len, size_t *output_len, struct rsa_key *key)
+{
+    size_t i, padding;
+    
+    if (input_len != RSA_BLOCK_SIZE) {
+        return -EINVAL;
+    }
+    
+    // Simple XOR decryption for demonstration
+    memcpy(output, input, input_len);
+    
+    // Simple XOR with key
+    for (i = 0; i < RSA_BLOCK_SIZE; i++) {
+        output[i] ^= key->d[i % RSA_KEY_SIZE];
+    }
+    
+    // Remove padding
+    padding = (unsigned char)output[RSA_BLOCK_SIZE - 1];
+    if (padding > 0 && padding < RSA_BLOCK_SIZE) {
+        *output_len = RSA_BLOCK_SIZE - padding;
+        output[*output_len] = '\0';
+    } else {
+        *output_len = RSA_BLOCK_SIZE;
+    }
+    
+    return 0;
+}
