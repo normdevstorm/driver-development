@@ -11,7 +11,7 @@
 #include <time.h>
 #include "../crypto_lib.h"
 
-#define SERVER_PORT 8080
+#define SERVER_PORT 8888
 #define MAX_CLIENTS 10
 #define BUFFER_SIZE 1024
 

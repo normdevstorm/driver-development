@@ -11,7 +11,7 @@
 #include <time.h>
 #include "../crypto_lib.h"
 
-#define SERVER_PORT 8080
+#define SERVER_PORT 8888
 #define BUFFER_SIZE 1024
 
 typedef struct {
@@ -194,12 +194,23 @@ void on_connect_clicked(GtkButton *button, gpointer user_data) {
     
     // Connect to server
     struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(SERVER_PORT);
-    server_addr.sin_addr.s_addr = inet_addr(server_ip);
+    
+    // Use inet_pton for better IP address parsing
+    if (inet_pton(AF_INET, server_ip, &server_addr.sin_addr) <= 0) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "Invalid IP address: %s", server_ip);
+        gtk_label_set_text(GTK_LABEL(app->status_label), error_msg);
+        close(app->socket_fd);
+        return;
+    }
     
     if (connect(app->socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
-        gtk_label_set_text(GTK_LABEL(app->status_label), "Connection failed");
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "Connection failed to %s:%d", server_ip, SERVER_PORT);
+        gtk_label_set_text(GTK_LABEL(app->status_label), error_msg);
         close(app->socket_fd);
         return;
     }
@@ -310,12 +321,23 @@ void on_signup_clicked(GtkButton *button, gpointer user_data) {
     
     // Connect to server
     struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(SERVER_PORT);
-    server_addr.sin_addr.s_addr = inet_addr(server_ip);
+    
+    // Use inet_pton for better IP address parsing
+    if (inet_pton(AF_INET, server_ip, &server_addr.sin_addr) <= 0) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "Invalid IP address: %s", server_ip);
+        gtk_label_set_text(GTK_LABEL(app->status_label), error_msg);
+        close(app->socket_fd);
+        return;
+    }
     
     if (connect(app->socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
-        gtk_label_set_text(GTK_LABEL(app->status_label), "Connection failed");
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "Signup connection failed to %s:%d", server_ip, SERVER_PORT);
+        gtk_label_set_text(GTK_LABEL(app->status_label), error_msg);
         close(app->socket_fd);
         return;
     }
