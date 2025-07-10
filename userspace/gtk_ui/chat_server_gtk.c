@@ -44,15 +44,15 @@ static ChatServerGTK *server_app = NULL;
 // User database (in real application, this would be in a file or database)
 typedef struct {
     char username[64];
-    char password[64];
+    char password_hash[SHA1_DIGEST_SIZE*2+1]; // SHA1 hash in hex format
 } User;
 
 #define MAX_USERS 100
 static User users[MAX_USERS] = {
-    {"admin", "admin123"},
-    {"user1", "password1"},
-    {"user2", "password2"},
-    {"test", "test123"}
+    {"admin", ""},  // Will be initialized at startup
+    {"user1", ""},  // Will be initialized at startup
+    {"user2", ""},  // Will be initialized at startup
+    {"test", ""}    // Will be initialized at startup
 };
 static int num_users = 4; // Current number of users
 
@@ -63,16 +63,19 @@ gboolean update_client_list();
 int decrypt_message(const char *input, size_t input_len, char *output);
 int signup_user(const char *username, const char *password);
 int user_exists(const char *username);
+int hash_password(const char *password, char *hash_output);
+int verify_password(const char *password, const char *stored_hash);
+void initialize_users(void);
 
 // Authenticate user
 int authenticate_user(const char *username, const char *password) {
     for (int i = 0; i < num_users; i++) {
-        if (strcmp(users[i].username, username) == 0 && 
-            strcmp(users[i].password, password) == 0) {
-            return 1;
+        if (strcmp(users[i].username, username) == 0) {
+            // Found the user, now verify the password using SHA1 hash
+            return verify_password(password, users[i].password_hash);
         }
     }
-    return 0;
+    return 0; // User not found
 }
 
 // Check if username already exists
@@ -99,11 +102,14 @@ int signup_user(const char *username, const char *password) {
         return -3; // Invalid input
     }
     
-    // Add new user
+    // Add new user with hashed password
     strncpy(users[num_users].username, username, sizeof(users[num_users].username) - 1);
-    strncpy(users[num_users].password, password, sizeof(users[num_users].password) - 1);
     users[num_users].username[sizeof(users[num_users].username) - 1] = '\0';
-    users[num_users].password[sizeof(users[num_users].password) - 1] = '\0';
+    
+    // Hash the password using SHA1
+    if (hash_password(password, users[num_users].password_hash) < 0) {
+        return -4; // Password hashing failed
+    }
     
     num_users++;
     
@@ -627,6 +633,7 @@ GtkWidget* create_server_window() {
     
     // Add initial log message
     update_log(g_strdup("Server application started"));
+    update_log(g_strdup("User database initialized with SHA1 password hashing"));
     update_log(g_strdup("Available users: admin, user1, user2, test"));
     
     return server_app->window;
@@ -656,6 +663,51 @@ int decrypt_message(const char *input, size_t input_len, char *output)
     return 0;
 }
 
+// Hash a password using SHA1
+int hash_password(const char *password, char *hash_output) {
+    char binary_hash[SHA1_DIGEST_SIZE];
+    
+    // Call the crypto driver to create a SHA1 hash
+    if (crypto_hash(password, strlen(password), binary_hash) < 0) {
+        return -1; // Hashing failed
+    }
+    
+    // Convert binary hash to hex string
+    crypto_bin_to_hex(binary_hash, SHA1_DIGEST_SIZE, hash_output);
+    return 0;
+}
+
+// Verify a password against a stored hash
+int verify_password(const char *password, const char *stored_hash) {
+    char computed_hash[SHA1_DIGEST_SIZE*2+1];
+    
+    if (hash_password(password, computed_hash) < 0) {
+        return 0; // Hash failed, authentication fails
+    }
+    
+    // Compare computed hash with stored hash
+    return (strcmp(computed_hash, stored_hash) == 0);
+}
+
+// Initialize user database with SHA1 hashed passwords
+void initialize_users(void)
+{
+    const char *passwords[] = {"admin123", "password1", "password2", "test123"};
+    char binary_hash[SHA1_DIGEST_SIZE];
+    
+    g_print("Initializing user database with SHA1 hashes...\n");
+    
+    for (int i = 0; i < num_users; i++) {
+        if (crypto_hash(passwords[i], strlen(passwords[i]), binary_hash) == 0) {
+            // Convert binary hash to hex string
+            crypto_bin_to_hex(binary_hash, SHA1_DIGEST_SIZE, users[i].password_hash);
+            g_print("User: %s, Hash computed successfully\n", users[i].username);
+        } else {
+            g_print("Failed to compute hash for user: %s\n", users[i].username);
+        }
+    }
+}
+
 int main(int argc, char *argv[]) {
     // Initialize crypto library
     if (crypto_init() < 0) {
@@ -663,10 +715,16 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
+    // Initialize user database with SHA1 hashed passwords
+    initialize_users();
+    
     gtk_init(&argc, &argv);
     
     GtkWidget *window = create_server_window();
     gtk_widget_show_all(window);
+    
+    // Add initial log message about SHA1 authentication
+    update_log(g_strdup("Using SHA1 for secure password authentication"));
     
     gtk_main();
     
